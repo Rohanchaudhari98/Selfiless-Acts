@@ -13,7 +13,7 @@ CORS(app, support_credentials=True)
 conn = sqlite3.connect('acts.db', check_same_thread=False)
 conn.execute("PRAGMA foreign_keys = ON")
 c = conn.cursor()
-
+http_counts = 0
 
 
 def get_act_counts(category):
@@ -28,12 +28,72 @@ def get_act_counts(category):
 
     return d[category]
 
+@app.errorhandler(404)
+def page_not_found(e):
+    http_counts += 1
+
+
+#Get total number of acts
+@app.route('/api/v1/acts/count', methods=['GET','POST','DELETE','PUT'])
+@cross_origin(supports_credentials=True)
+def get_count():
+    if(request.method=='GET'):
+        cat=c.execute("SELECT  category  FROM categories")
+        l1=cat.fetchall()
+        count=[0]
+        if(len(l1)==0):
+            if(request.is_json):
+                print("empty response")
+                l=[count]
+                return json.dumps(list(l[0])),200
+            else:
+                return jsonify(status="Empty Response"),200
+        else:
+            catt=c.execute("SELECT DISTINCT category FROM acts")
+            l=catt.fetchall()
+            if(len(l)>0):
+                for ele in l:
+                    e=list(ele)
+                    count[0]+=get_act_counts(e[0])
+                    print(e,count)
+            print("count:",count[0])
+            l=[count]
+            return json.dumps(list(l[0])),200
+    else:
+        return jsonify({}),405
+
+
+@app.route('/api/v1/_count', methods = ['POST','PUT','GET','DELETE'])
+@cross_origin(supports_credentials=True)
+def get_http_counts():
+    global http_counts
+    if(request.method=='GET'):
+        return_list = [http_counts]
+        if(return_list[0] != 0):
+            if(request.is_json):
+                return json.dumps(return_list),200
+            else:
+                return json.dumps(return_list),200
+        else:
+            if(request.is_json):
+                return json.dumps(0), 200
+            else:
+                return json.dumps(0), 200
+    if(request.method=='DELETE'):
+        http_counts = 0
+        return jsonify({}),200
+
+    else:
+        return jsonify({}),405
+
 
 
 #3.list and add categories
 @app.route('/api/v1/categories', methods=['GET','POST','DELETE','PUT'])
 @cross_origin(supports_credentials=True)
 def get_cats():
+    global http_counts
+    http_counts += 1
     if(request.method=='GET'):
         cat=c.execute("SELECT  category  FROM categories")
         l1=cat.fetchall()
@@ -48,7 +108,7 @@ def get_cats():
             for ele in l1:
                 e=list(ele)
                 d[ele[0]]=0
-            
+
             catt=c.execute("SELECT category FROM acts")
             l=catt.fetchall()
             if(len(l)>0):
@@ -108,6 +168,8 @@ def dict_factory(cursor, row):
 @app.route('/api/v1/categories/<string:cat_name>/acts', methods=['GET','POST','DELETE','PUT'])
 @cross_origin(supports_credentials=True)
 def get_acts(cat_name):
+    global http_counts
+    http_counts += 1
     print("illi bantu")
     if(request.method=='GET'):
         if(request.args.get('start') is None or request.args.get('end') is None):
@@ -193,7 +255,8 @@ def get_acts(cat_name):
 @app.route('/api/v1/categories/<string:cat_name>/acts/size/',methods=['GET','POST','DELETE','PUT'])
 @cross_origin(supports_credentials=True)
 def get_num_acts(cat_name):
-
+    global http_counts
+    http_counts += 1
     if(request.method=='GET'):
         c.execute("SELECT COUNT(actId) from acts where category= '%s'" %cat_name)
         l=c.fetchall()
@@ -244,7 +307,7 @@ def check_encoding(sb):
     sb=sb.encode("ascii")
     print(sb,type(sb))
     try:
-        
+
         if type(sb) == str:
             print("OKAYYY")
             sb_bytes = bytes(sb)
@@ -281,6 +344,8 @@ def dict_factory(cursor, row):
 @cross_origin(supports_credentials=True)
 def upload_act():
     # print(request)
+    global http_counts
+    http_counts += 1
     if(request.method=='POST'):
         if(request.is_json):
             actId=request.json.get('actId')
@@ -308,14 +373,9 @@ def upload_act():
             else:
                 return jsonify(status="Fields empty or wrong format"),400
         #print(actId,username,category,caption,timestamp,imgB64)
-        try:
-            url = "http://35.171.186.42:8080/api/v1/users"
-            res = requests.get(url).json()
-        except ValueError:
-            if(request.is_json):
-                print("wrong format")
-                return jsonify({}),400
-                    
+
+        url = "http://3.86.184.220:80/api/v1/users"
+        res = requests.get(url).json()
         print("res:",res)
         if(username in res):
             print("yes it is")
@@ -361,7 +421,7 @@ def upload_act():
             else:
                 print("Task done")
                 return jsonify(status="Successful"),201
-        
+
         elif(request.is_json):
             print("Wrong Username")
             return jsonify({}),400
@@ -374,6 +434,8 @@ def upload_act():
 
 @app.route('/api/v1/acts/<int:actId>',methods=['GET','POST','DELETE','PUT'])
 def remove_act(actId):
+    global http_counts
+    http_counts += 1
     if(request.method=='DELETE'):
         t=(actId,)
         c.execute("SELECT * FROM acts WHERE actId=?",t)
@@ -395,6 +457,7 @@ def remove_act(actId):
 
 @app.route('/api/v1/acts/upvote',methods=['GET','POST','DELETE','PUT'])
 def upvote():
+    http_counts += 1
     if(request.method=='POST'):
         received=json.loads(request.data)
         print(received)
@@ -422,6 +485,8 @@ def upvote():
 @app.route('/api/v1/categories/<string:cat_name>', methods = ['POST','PUT','GET','DELETE'])
 @cross_origin(supports_credentials=True)
 def remove_category(cat_name):
+    global http_counts
+    http_counts += 1
     if(request.method=='DELETE'):
         print(cat_name)
         category = cat_name
@@ -464,8 +529,12 @@ def remove_category(cat_name):
         return jsonify({}), 405
 
 
+
+
+
 if __name__ == '__main__':
-    app.run( debug=False,
-             host='0.0.0.0',
-             port=80
-             )
+     app.run( debug=False,
+              host='0.0.0.0',
+              port=80
+              )
+#app.run(debug=True)
